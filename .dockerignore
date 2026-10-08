@@ -1,0 +1,13 @@
+# Keep secrets, local state and non-runtime files out of the image
+.env
+.git
+.github
+.pytest_cache
+__pycache__/
+*.pyc
+*.pbix
+docs
+powerbi
+tests
+data/processed
+.venv/
