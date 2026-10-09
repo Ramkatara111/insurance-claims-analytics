@@ -154,3 +154,66 @@ SELECT
     TO_CHAR(SUM(injury_claim), '$99,999,999') AS total_injury_claim,
     ROUND(100.0 * SUM(injury_claim) / SUM(total_claim_amount), 2) AS injury_claim_pct
 FROM core.fact_claims;
+
+
+
+-- ============================================================
+-- Window Function Analysis
+-- ============================================================
+
+-- Month-over-month claims analysis using LAG()
+WITH monthly_claims AS (
+    SELECT
+        DATE_TRUNC('month', d.full_date) AS claim_month,
+        COUNT(*) AS claim_count,
+        SUM(f.total_claim_amount) AS total_claim_amount
+    FROM core.fact_claims f
+    JOIN core.dim_date d
+        ON f.incident_date_key = d.date_key
+    GROUP BY DATE_TRUNC('month', d.full_date)
+)
+SELECT
+    claim_month,
+    claim_count,
+    total_claim_amount,
+    LAG(claim_count) OVER (
+        ORDER BY claim_month
+    ) AS previous_month_claims,
+    claim_count
+        - LAG(claim_count) OVER (
+            ORDER BY claim_month
+        ) AS month_over_month_change
+FROM monthly_claims
+ORDER BY claim_month;
+
+
+
+
+
+
+
+-- Rank states by fraud rate using DENSE_RANK()
+WITH state_risk AS (
+    SELECT
+        p.policy_state,
+        COUNT(*) AS claim_count,
+        SUM(f.fraud_reported_flag) AS fraud_claims,
+        ROUND(
+            100.0 * SUM(f.fraud_reported_flag) / COUNT(*),
+            2
+        ) AS fraud_rate_pct
+    FROM core.fact_claims f
+    JOIN core.dim_policy p
+        ON f.policy_key = p.policy_key
+    GROUP BY p.policy_state
+)
+SELECT
+    policy_state,
+    claim_count,
+    fraud_claims,
+    fraud_rate_pct,
+    DENSE_RANK() OVER (
+        ORDER BY fraud_rate_pct DESC
+    ) AS fraud_rate_rank
+FROM state_risk
+ORDER BY fraud_rate_rank, policy_state;
