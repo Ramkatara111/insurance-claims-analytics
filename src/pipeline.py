@@ -118,7 +118,6 @@ def run_pipeline(source_path: Optional[Path] = None, full_refresh: bool = False,
         # touched (staging/core are only modified inside the load transaction below).
         logger.info("[Step 2/7] Extracting and validating source data...")
 
-            # logger.info("[Step 2/7] Extracting and validating source data...")
         df_raw = extract_raw_claims(source_path)
         df_clean = clean_claims_data(df_raw)
 
