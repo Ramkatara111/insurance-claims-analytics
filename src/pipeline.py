@@ -117,8 +117,48 @@ def run_pipeline(source_path: Optional[Path] = None, full_refresh: bool = False,
         # Extract, clean and validate in memory: still fails fast BEFORE any warehouse data is
         # touched (staging/core are only modified inside the load transaction below).
         logger.info("[Step 2/7] Extracting and validating source data...")
+
+            # logger.info("[Step 2/7] Extracting and validating source data...")
         df_raw = extract_raw_claims(source_path)
         df_clean = clean_claims_data(df_raw)
+
+        # Record duplicate source rows before the existing fail-fast validation.
+        duplicate_rows = df_clean[
+            df_clean["policy_number"].duplicated(keep=False)
+        ].copy()
+
+        if not duplicate_rows.empty:
+            with engine.begin() as reject_conn:
+                rejected_records = [
+                    {
+                        "run_id": run_id,
+                        "source_row_number": row["source_row_number"],
+                        "policy_number": row["policy_number"],
+                        "rejection_reason": "Duplicate policy_number",
+                    }
+                    for _, row in duplicate_rows.iterrows()
+                ]
+
+                reject_conn.execute(
+                    text("""
+                        INSERT INTO staging.rejected_rows
+                        (
+                            run_id,
+                            source_row_number,
+                            policy_number,
+                            rejection_reason
+                        )
+                        VALUES
+                        (
+                            :run_id,
+                            :source_row_number,
+                            :policy_number,
+                            :rejection_reason
+                        )
+                    """),
+                    rejected_records,
+                )
+
         validate_unique_policy_numbers(df_clean)
         tables_dict = build_star_schema(df_clean)
 

@@ -260,3 +260,19 @@ CREATE TABLE IF NOT EXISTS audit.pipeline_run_log (
     status TEXT,
     error_message TEXT
 );
+
+
+-- ============================================================
+-- Rejected source rows
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS staging.rejected_rows (
+    rejection_id BIGSERIAL PRIMARY KEY,
+    run_id UUID NOT NULL,
+    source_row_number INTEGER,
+    policy_number TEXT,
+    rejection_reason TEXT NOT NULL,
+    rejected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_rejected_rows_run_id
+    ON staging.rejected_rows(run_id);

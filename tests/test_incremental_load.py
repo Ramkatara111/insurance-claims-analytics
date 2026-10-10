@@ -253,6 +253,19 @@ def test_s6_duplicate_policy_number_fails_and_is_logged(wh):
     assert status == "FAILED"
     assert mode == "incremental"
     assert error_message and "duplicated" in error_message and dup_policy_number in error_message
+        
+    rejected_rows = wh.rows("""
+        SELECT
+            policy_number,
+            rejection_reason
+        FROM staging.rejected_rows
+        ORDER BY rejection_id DESC
+        LIMIT 1
+    """)
+
+    assert len(rejected_rows) == 1
+    assert rejected_rows[0][0] == dup_policy_number
+    assert rejected_rows[0][1] == "Duplicate policy_number"
 
     assert wh.counts() == counts_before
     assert wh.rows(SNAPSHOT_SQL) == snapshot_before
