@@ -156,12 +156,12 @@ SELECT
 FROM core.fact_claims;
 
 
-
 -- ============================================================
 -- Window Function Analysis
 -- ============================================================
 
 -- Month-over-month claims analysis using LAG()
+-- Note: March 2015 is a partial month in this dataset.
 WITH monthly_claims AS (
     SELECT
         DATE_TRUNC('month', d.full_date) AS claim_month,
@@ -171,23 +171,37 @@ WITH monthly_claims AS (
     JOIN core.dim_date d
         ON f.incident_date_key = d.date_key
     GROUP BY DATE_TRUNC('month', d.full_date)
+),
+monthly_with_status AS (
+    SELECT
+        claim_month,
+        claim_count,
+        total_claim_amount,
+        CASE
+            WHEN claim_month = (SELECT MAX(claim_month) FROM monthly_claims)
+                THEN 'Partial Month'
+            ELSE 'Complete Month'
+        END AS month_status
+    FROM monthly_claims
 )
 SELECT
     claim_month,
+    month_status,
     claim_count,
     total_claim_amount,
     LAG(claim_count) OVER (
         ORDER BY claim_month
     ) AS previous_month_claims,
-    claim_count
-        - LAG(claim_count) OVER (
-            ORDER BY claim_month
-        ) AS month_over_month_change
-FROM monthly_claims
+    CASE
+        WHEN month_status = 'Partial Month'
+            THEN NULL
+        ELSE claim_count
+            - LAG(claim_count) OVER (
+                ORDER BY claim_month
+            )
+    END AS month_over_month_change
+FROM monthly_with_status
 ORDER BY claim_month;
-
-
-
 
 
 
