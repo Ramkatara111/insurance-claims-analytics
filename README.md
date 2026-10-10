@@ -5,6 +5,8 @@
 [![Data Modeling](https://img.shields.io/badge/Modeling-Kimball_Star_Schema-green.svg)]()
 [![Dataset](https://img.shields.io/badge/Dataset-1%2C000_Claims-orange.svg)]()
 An end-to-end insurance claims analytics project: a Python ETL pipeline loads a public auto-insurance claims dataset into a PostgreSQL Kimball-style dimensional model (star schema), with SQL analysis, a transparent rule-based fraud risk score and a Power BI dashboard. Built as a data analytics portfolio project; read the [Limitations](#10-limitations) before interpreting any number.
+
+**Project Documentation:** [Architecture](docs/architecture.md) · [Data Dictionary](docs/data_dictionary.md) · [Interview Notes](docs/interview_notes.md)
 ---
 ## 1. Executive Summary & Key Metrics
 All figures below were computed by running SQL queries against the populated PostgreSQL warehouse (`core.fact_claims` and the dimensional views):
@@ -239,6 +241,13 @@ See [docs/interview_notes.md](docs/interview_notes.md) for the reasoning behind 
 ### Tests
 `python -m pytest tests -v` includes `tests/test_incremental_load.py`, which runs the real pipeline against a throwaway database per test (created and dropped automatically, so the configured `DB_NAME` is not touched) for these scenarios: S1 fresh load, S2 re-run with the same file, S3 appended rows, S4 one changed row, S5 a row removed from the source, S6 duplicate `policy_number`, S7 `--full-refresh`. The database user needs the `CREATEDB` privilege; otherwise those tests are skipped.
 ---
+### Additional Analytics & Audit Features
+
+- **Window functions:** `LAG()` is used for month-over-month claim comparison, and `DENSE_RANK()` is used to rank states by reported fraud rate.
+- **Rejected-row audit:** duplicate `policy_number` rows are recorded in `staging.rejected_rows` with the pipeline `run_id`, source row number, policy number, and rejection reason before the existing fail-fast validation stops the run. This records why the input was rejected; it does not quarantine rejected rows while allowing valid rows to load.
+- **Power BI Row-Level Security:** the PBIX includes a static `state_oh` role filtering `dim_incident[incident_state] = "OH"` for demonstration and testing. This is report-level RLS, not automatic per-user access management.
+
+The full test suite currently passes **26 tests**.
 ## 9. Power BI Dashboard
 A complete manual build blueprint is documented in [powerbi/dashboard_specification.md](powerbi/dashboard_specification.md), including:
 * **Connection String:** Server `localhost:5433`, Database `insurance_dw`, User `postgres` (or import from `data/processed/*.csv`).
@@ -247,10 +256,14 @@ A complete manual build blueprint is documented in [powerbi/dashboard_specificat
 * **Page Layouts:** Executive Overview, Fraud Risk Scoring, and Trends & Geography, with slicers on every page.
 ---
 ### Dashboard Screenshots
-<!-- Add your screenshots to docs/images/ with these names -->
+
 ![Executive Overview](docs/images/executive_overview.png)
+
 ![Fraud Risk Scoring](docs/images/fraud_risk_scoring.png)
+
 ![Trends and Geography](docs/images/trends_geography.png)
+
+![Power BI RLS — Ohio State Filter](docs/images/rls_state_filter.png)
 ---
 ## 10. Limitations
 * **Small sample:** 1,000 rows, so segment-level percentages (for example a single vehicle make or the 41 policies under 2 years' tenure) rest on small counts.
@@ -274,7 +287,7 @@ A complete manual build blueprint is documented in [powerbi/dashboard_specificat
 │   └── Dockerfile                     # Pipeline image
 ├── sql/
 │   ├── 00_full_refresh_reset.sql      # Drops staging + core tables only (used by --full-refresh; never touches audit)
-│   ├── 01_init_schema.sql             # Idempotent DDL: staging, core (star schema), audit, schemas
+│   ├── 01_init_schema.sql             # Idempotent DDL: staging, core, audit & rejected-row audit
 │   ├── 02_create_views.sql            # Analytical views
 │   ├── 03_analytical_queries.sql      # 10 business queries
 │   ├── 04_outlier_checks.sql          # Statistical outlier checks (not a fraud indicator)
@@ -295,7 +308,7 @@ A complete manual build blueprint is documented in [powerbi/dashboard_specificat
 │   ├── findings_and_insights.md
 │   ├── architecture.md
 │   ├── interview_notes.md
-│   └── images/                        # Dashboard screenshots (folder not in the repo yet; add your own)
+│   └── images/                         # Dashboard screenshots
 ├── tests/
 │   ├── test_pipeline.py               # Data hygiene, natural key & source_row_number, audit history
 │   ├── test_incremental_load.py       # Scenarios S1-S7 against a throwaway PostgreSQL database
